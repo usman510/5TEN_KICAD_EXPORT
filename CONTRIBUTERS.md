@@ -1,1 +1,0 @@
-- Hildo Guillardi Júnior

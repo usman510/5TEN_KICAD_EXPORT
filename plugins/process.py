@@ -21,46 +21,8 @@ class ProcessManager:
         self.board = pcbnew.GetBoard()
         self.bom = []
         self.components = []
-        self.__rotation_db = self.__read_rotation_db()
 
     @staticmethod
-    def __read_rotation_db(filename: str = os.path.join(os.path.dirname(__file__), 'rotations.cf')) -> dict[str, float]:
-        '''Read the rotations.cf config file so we know what rotations
-        to apply later.
-        '''
-        db = {}
-
-        with open(filename, 'r') as fh:
-            for line in fh:
-                line = line.rstrip()
-                line = re.sub('#.*$', '', line)         # remove anything after a comment
-                line = re.sub('\s*$', '', line)         # remove all trailing space
-
-                if (line == ""):
-                    continue
-
-                match = re.match('^([^\s]+)\s+(\d+)$', line)
-
-                if match:
-                    db.update({ match.group(1): int(match.group(2)) })
-
-        return db
-
-    def _get_rotation_from_db(self, footprint: str) -> float:
-        '''Get the rotation to be added from the database file.'''
-        # Look for regular expression math of the footprint name and not its root library.
-        fpshort = footprint.split(':')[-1]
-
-        for expression, delta in self.db.items():
-            fp = fpshort
-
-            if (re.search(':', expression)):
-                fp = footprint
-                
-            if(re.search(expression, fp)):
-                return delta
-
-        return 0.0
 
     def generate_gerber(self, temp_dir):
         '''Generate the Gerber files.'''
@@ -147,11 +109,11 @@ class ProcessManager:
                 pcbnew.B_Cu: 'bottom',
             }.get(footprint.GetLayer())
 
-            # mount_type = {
-            #     0: 'smt',
-            #     1: 'tht',
-            #     2: 'smt'
-            # }.get(footprint.GetAttributes())
+            mount_type = {
+                0: 'smt',
+                1: 'tht',
+                2: 'smt'
+            }.get(footprint.GetAttributes())
 
             if not footprint.GetAttributes() & pcbnew.FP_EXCLUDE_FROM_POS_FILES:
                 # append unique ID if duplicate footprint designator
@@ -164,17 +126,6 @@ class ProcessManager:
                 mid_x = (footprint.GetPosition()[0] - self.board.GetDesignSettings().GetAuxOrigin()[0]) / 1000000.0
                 mid_y = (footprint.GetPosition()[1] - self.board.GetDesignSettings().GetAuxOrigin()[1]) * -1.0 / 1000000.0
                 rotation = footprint.GetOrientation().AsDegrees() if hasattr(footprint.GetOrientation(), 'AsDegrees') else footprint.GetOrientation() / 10.0
-                # Get the rotation offset to be added to the actual rotation prioritizing the explicated by the
-                # designer at the standards symbol fields. If not specified use the internal database.
-                rotation_offset = self._get_rotation_offset_from_footprint(footprint) #or self._get_rotation_from_db(footprint)
-                rotation = (rotation + rotation_offset) % 360.0
-
-                # position offset needs to take rotation into account
-                pos_offset = self._get_position_offset_from_footprint(footprint)
-                rsin = math.sin(rotation / 180 * math.pi)
-                rcos = math.cos(rotation / 180 * math.pi)
-                pos_offset = ( pos_offset[0] * rcos - pos_offset[1] * rsin, pos_offset[0] * rsin + pos_offset[1] * rcos )
-                mid_x, mid_y = tuple(map(sum,zip((mid_x, mid_y), pos_offset)))
 
                 self.components.append({
                     'Designator': designator,
@@ -196,9 +147,8 @@ class ProcessManager:
                 for component in self.bom:
                     same_footprint = component['Footprint'] == self._normalize_footprint_name(footprint_name)
                     same_value = component['Value'].upper() == footprint.GetValue().upper()
-                    same_lcsc = component['LCSC Part #'] == self._get_mpn_from_footprint(footprint)
 
-                    if same_footprint and same_value and same_lcsc:
+                    if same_footprint and same_value:
                         component['Designator'] += ", " + "{}{}{}".format(footprint.GetReference(), "" if unique_id == "" else "_", unique_id)
                         component['Quantity'] += 1
                         insert = False
@@ -212,7 +162,6 @@ class ProcessManager:
                         'Quantity': 1,
                         'Value': footprint.GetValue(),
                         # 'Mount': mount_type,
-                        'LCSC Part #': self._get_mpn_from_footprint(footprint),
                     })
 
         if len(self.components) > 0:
@@ -250,57 +199,6 @@ class ProcessManager:
                 os.remove(os.path.join(temp_dir, item))
 
         return temp_file
-
-    def _get_mpn_from_footprint(self, footprint):
-        ''''Get the MPN/LCSC stock code from standard symbol fields.'''
-        keys = ['LCSC Part #', 'JLCPCB Part #']
-        fallback_keys = ['LCSC Part', 'JLC Part', 'LCSC', 'JLC', 'MPN', 'Mpn', 'mpn']
-
-        if footprint.HasProperty('dnp'):
-            return 'DNP'
-
-        for key in keys + fallback_keys:
-            if footprint.HasProperty(key):
-                return footprint.GetProperty(key)
-
-    def _get_rotation_offset_from_footprint(self, footprint) -> float:
-        '''Get the rotation from standard symbol fields.'''
-        keys = ['JLCPCB Rotation Offset']
-        fallback_keys = ['JlcRotOffset', 'JLCRotOffset']
-
-        offset = None
-
-        for key in keys + fallback_keys:
-            if footprint.HasProperty(key):
-                offset = footprint.GetProperty(key)
-                break
-
-        if offset is None or offset == "":
-            return 0
-        else:
-            try:
-                return float(offset)
-            except ValueError:
-                raise RuntimeError("Rotation offset of {} is not a valid number".format(footprint.GetReference()))
-
-    def _get_position_offset_from_footprint(self, footprint):
-        keys = ['JLCPCB Position Offset']
-        fallback_keys = ['JlcPosOffset', 'JLCPosOffset']
-
-        offset = None
-
-        for key in keys + fallback_keys:
-            if footprint.HasProperty(key):
-                offset = footprint.GetProperty(key)
-                break
-
-        if offset is None or offset == "":
-            return (0, 0)
-        else:
-            try:
-                return ( float(offset.split(",")[0]), float(offset.split(",")[1]) )
-            except ValueError:
-                raise RuntimeError("Position offset of {} is not a valid pair of numbers".format(footprint.GetReference()))
 
     def _normalize_footprint_name(self, footprint):
         # replace footprint names of resistors, capacitors, inductors, diodes, LEDs, fuses etc, with the footprint size only

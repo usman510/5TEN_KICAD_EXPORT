@@ -7,7 +7,7 @@ from .events import StatusEvent
 
 
 # WX GUI form that show the plugin progress
-class KiCadToJLCForm(wx.Frame):
+class KiCadToShowComplexForm(wx.Frame):
     def __init__(self):
         wx.Dialog.__init__(
             self,
@@ -49,13 +49,13 @@ class KiCadToJLCForm(wx.Frame):
 # Plugin definition
 class Plugin(pcbnew.ActionPlugin):
     def __init__(self):
-        self.name = "Fabrication Toolkit"
+        self.name = "5TEN Fabrication Toolkit"
         self.category = "Manufacturing"
-        self.description = "Toolkit for automating PCB fabrication process with KiCad and JLC PCB"
+        self.description = "Toolkit for automating PCB fabrication process with KiCad and ShowComplex"
         self.pcbnew_icon_support = hasattr(self, "show_toolbar_button")
         self.show_toolbar_button = True
         self.icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')
         self.dark_icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')
 
     def Run(self):
-        KiCadToJLCForm().Show()
+        KiCadToShowComplexForm().Show()
