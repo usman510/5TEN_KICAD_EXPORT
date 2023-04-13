@@ -3,7 +3,7 @@
     "name": "5TEN Fabrication Toolkit",
     "description": "fabrication toolkit",
     "description_full": "Toolkit for automating PCB fabrication process with KiCad.",
-    "identifier": "com.github.usman510.5TEN_KICAD_EXPORT",
+    "identifier": "com.github.usman510.5TEN-KICAD-EXPORT",
     "type": "plugin",
     "author": {
         "name": "Usman J",
@@ -30,7 +30,7 @@
         {
             "version": "1.0",
             "status": "stable",
-            "kicad_version": "6.00"
+            "kicad_version": "7.00"
         }
     ]
 }
